@@ -1,0 +1,24 @@
+import PySimpleGUI as sg
+from Module import Exif_Info
+
+"""layeout for browse menu for exif-tool"""
+layout = [[sg.Text('Please Select any Picture or Picture in Bytes')],
+                           [sg.InputText('Paste the path or Browse', key='path'), sg.FileBrowse()],
+                           [sg.Button("Extract"), sg.Button("Cancel")] ]
+
+"""Window title"""
+window = sg.Window("EXIF_Tool_Extraction").Layout(layout)
+
+"""events on buttons cancel and extract"""
+while True:
+    event, values = window.Read()
+    if event in (None, 'Cancel'):
+        break
+#progress bar will appear after extract button is clicked and show the results
+    if event == 'Extract':
+        for i in range(1, 1000):
+            sg.OneLineProgressMeter('Progressing', i + 1, 1000, 'key', 'Optional message')
+        Exif_Info.main(values['path'])
+
+
+
