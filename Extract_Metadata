@@ -1,0 +1,612 @@
+import PySimpleGUI as sg
+try:
+    import binascii
+    import PIL
+    import PIL.Image as PILimage
+    from PIL import ImageDraw, ImageFont, ImageEnhance
+    from PIL.ExifTags import TAGS, GPSTAGS
+except ImportError as err:
+    exit(err)
+
+"""Worker class with all the functions to find different properties from exif data"""
+
+class Worker(object):
+    #some constructors of some properties
+    def __init__(self, img):
+        self.img = img
+        self.get_exif_data()
+        self.lat = self.get_lat()
+        self.lon = self.get_lon()
+        self.date =self.get_date_time()
+        self.version = self.get_exifversion()
+        self.focal = self.get_focal_length()
+        self.camera = self.get_camera()
+        self.uid = self.get_id()
+        #self.gps_ref = self.get_gpsref()
+        #self.exifsize = self.get_exif_size()
+        self.altitude = self.get_altitude()
+        self.gversion = self.get_gpsversion()
+        self.soft = self.get_software()
+        super(Worker, self).__init__()
+
+    #the method to be used within the functions
+    @staticmethod
+    def get_if_exist(data, key):
+        if key in data:
+            return data[key]
+        return None
+
+    @staticmethod
+    def convert_to_degress(value):
+        """Helper function to convert the GPS coordinates
+        stored in the EXIF to degress in float format"""
+        d0 = value[0][0]
+        d1 = value[0][1]
+        d = float(d0) / float(d1)
+        m0 = value[1][0]
+        m1 = value[1][1]
+        m = float(m0) / float(m1)
+
+        s0 = value[2][0]
+        s1 = value[2][1]
+        s = float(s0) / float(s1)
+
+        return d + (m / 60.0) + (s / 3600.0)
+
+    #extracts all exif data in raw form
+    def get_exif_data(self):
+        """Returns a dictionary from the exif data of an PIL Image item. Also
+        converts the GPS Tags"""
+        exif_data = {}
+        info = self.img._getexif()
+        if info:
+            for tag, value in info.items():
+                decoded = TAGS.get(tag, tag)
+                print(sep="\n")
+                if decoded == "GPSInfo":
+                    gps_data = {}
+                    for t in value:
+                        sub_decoded = GPSTAGS.get(t, t)
+                        gps_data[sub_decoded] = value[t]
+
+                    exif_data[decoded] = gps_data
+                else:
+                    exif_data[decoded] = value
+        self.exif_data = exif_data
+        return exif_data
+
+    #converts the latitude into degress
+    def get_lat(self):
+        """Returns the latitude and longitude, if available, from the
+        provided exif_data (obtained through get_exif_data above)"""
+        # print(exif_data)
+        if 'GPSInfo' in self.exif_data:
+            gps_info = self.exif_data["GPSInfo"]
+            gps_latitude = self.get_if_exist(gps_info, "GPSLatitude")
+            gps_latitude_ref = self.get_if_exist(gps_info, 'GPSLatitudeRef')
+            if gps_latitude and gps_latitude_ref:
+                lat = self.convert_to_degress(gps_latitude)
+                if gps_latitude_ref != "N":
+                    lat = 0 - lat
+                lat = str(f"{lat:.{5}f}")
+                return lat
+        else:
+            return None
+    #returns raw form of latitude
+    def get_exif_lat(self):
+        """Returns the latitude and longitude, if available, from the
+        provided exif_data (obtained through get_exif_data above)"""
+        # print(exif_data)
+        if 'GPSInfo' in self.exif_data:
+            gps_info = self.exif_data["GPSInfo"]
+            gps_latitude = self.get_if_exist(gps_info, "GPSLatitude")
+            return gps_latitude
+        else:
+            return 'Not Found'
+    #converts the latitude into degress
+    def get_lon(self):
+        """Returns the latitude and longitude, if available, from the
+        provided exif_data (obtained through get_exif_data above)"""
+        # print(exif_data)
+        if 'GPSInfo' in self.exif_data:
+            gps_info = self.exif_data["GPSInfo"]
+            gps_longitude = self.get_if_exist(gps_info, 'GPSLongitude')
+            gps_longitude_ref = self.get_if_exist(gps_info, 'GPSLongitudeRef')
+            if gps_longitude and gps_longitude_ref:
+                lon = self.convert_to_degress(gps_longitude)
+                if gps_longitude_ref != "E":
+                    lon = 0 - lon
+                lon = str(f"{lon:.{5}f}")
+                return lon
+        else:
+            return None
+    #returns raw form of longitude on map
+    def get_exif_lon(self):
+        """Returns the latitude and longitude, if available, from the
+        provided exif_data (obtained through get_exif_data above)"""
+        # print(exif_data)
+        if 'GPSInfo' in self.exif_data:
+            gps_info = self.exif_data["GPSInfo"]
+            gps_longitude = self.get_if_exist(gps_info, 'GPSLongitude')
+            return gps_longitude
+        else:
+            return 'Not Found'
+    #returns date and time taken of picture in proper format
+    def get_date_time(self):
+        if 'DateTime' in self.exif_data:
+            date_and_time = self.exif_data['DateTime']
+            return date_and_time
+        else:
+            return None
+    #returns gps date stamp
+    def get_date_stamp(self):
+        if 'GPSInfo' in self.exif_data:
+            gps_info = self.exif_data["GPSInfo"]
+            gps_date_stamp = self.get_if_exist(gps_info, 'GPSDateStamp')
+            return gps_date_stamp
+        else:
+            return 'Not Found'
+    #returns gps time stamp of time
+    def get_time_stamp(self):
+        if 'GPSInfo' in self.exif_data:
+            gps_info = self.exif_data["GPSInfo"]
+            gps_time_stamp = self.get_if_exist(gps_info, 'GPSTimeStamp')
+            return gps_time_stamp
+        else:
+            return 'Not Found'
+
+    #returns camera name if found
+    def get_camera(self):
+        if 'Make' in self.exif_data:
+            camera = self.exif_data['Make']
+        if 'Model' in self.exif_data:
+            cameraf = self.exif_data['Model']
+            return camera, cameraf
+        else:
+            return None
+
+    #returns exif height at the time it was taken
+    def get_exif_height(self):
+        if 'ExifImageHeight' in self.exif_data:
+            height = self.exif_data['ExifImageHeight']
+            return 'Height:',height
+        else:
+           return None
+    #returns exif width at the time picture was taken
+    def get_exif_width(self):
+        if 'ExifImageWidth' in self.exif_data:
+            width = self.exif_data['ExifImageWidth']
+            return 'Width:',width
+        else:
+            return None
+    #returns image id
+    def get_id(self):
+        if 'ImageUniqueID' in self.exif_data:
+            idu = self.exif_data['ImageUniqueID']
+            return idu
+        else:
+         return None
+    #returns refered latitude pole on map
+    def get_gpsref_lat(self):
+        if 'GPSInfo' in self.exif_data:
+            gps_info = self.exif_data["GPSInfo"]
+            gps_lt_ref = self.get_if_exist(gps_info, "GPSLatitudeRef")
+            return gps_lt_ref
+        else:
+            return None
+
+    #returns refered longitude pole on map
+    def get_gpsref_lon(self):
+        if 'GPSInfo' in self.exif_data:
+            gps_info = self.exif_data["GPSInfo"]
+            gps_ln_ref = self.get_if_exist(gps_info, "GPSLongitudeRef")
+            return gps_ln_ref
+        else:
+              return None
+     #returns gpsversion id
+    def get_gpsversion(self):
+        if 'GPSInfo' in self.exif_data:
+            gps_info = self.exif_data["GPSInfo"]
+            gps_version = self.get_if_exist(gps_info, "GPSVersionID")
+            return gps_version
+        else:
+            return None
+    #returns altitude value
+    def get_altitude(self):
+        if 'GPSInfo' in self.exif_data:
+            gps_info = self.exif_data["GPSInfo"]
+            gps_altitude = self.get_if_exist(gps_info, "GPSAltitude")
+            return gps_altitude
+        else:
+            return None
+
+    def get_focal_length(self):
+        if 'FocalLength' in self.exif_data:
+            fl = self.exif_data['FocalLength']
+            return fl
+        else:
+            return None
+        
+    def get_software(self):
+        if 'Software' in self.exif_data:
+            ss = self.exif_data['Software']
+            return ss
+        else:
+            return None
+
+    def get_speed_rating(self):
+        if 'ISOSpeedRatings' in self.exif_data:
+            iso = self.exif_data['ISOSpeedRatings']
+            return iso
+        else:
+            return None
+
+    def get_exposure(self):
+        if 'ExposureMode' in self.exif_data:
+            ex = self.exif_data['ExposureMode']
+            return ex
+        else:
+            return None
+
+    def get_resolution(self):
+        if 'ResolutionUnit' in self.exif_data:
+            ru = self.exif_data['ResolutionUnit']
+            return ru
+        else:
+            return None
+
+    def get_focal_film(self):
+        if 'FocalLengthIn35mmFilm' in self.exif_data:
+            ff = self.exif_data['FocalLengthIn35mmFilm']
+            return ff
+        else:
+            return None
+
+    def get_scene_capture(self):
+        if 'SceneCaptureType' in self.exif_data:
+            sc = self.exif_data['SceneCaptureType']
+            return sc
+        else:
+            return None
+
+
+#isoexposurevalues
+    def get_shutter_value(self):
+        if 'ShutterSpeedValue' in self.exif_data:
+            sc = self.exif_data['ShutterSpeedValue']
+            return sc
+        else:
+            return None
+
+    def get_aprature_value(self):
+        if 'ApertureValue' in self.exif_data:
+            sc = self.exif_data['ApertureValue']
+            return sc
+        else:
+            return None
+
+    def get_max_aprature_value(self):
+        if 'MaxApertureValue' in self.exif_data:
+            sc = self.exif_data['MaxApertureValue']
+            return sc
+        else:
+            return None
+
+    def get_brigt_value(self):
+        if 'BrightnessValue' in self.exif_data:
+            bv = self.exif_data['BrightnessValue']
+            return bv
+        else:
+            return None
+        
+    def get_exposure_values(self):
+        if 'ExposureBiasValue' in self.exif_data:
+            sc = self.exif_data['ExposureBiasValue']
+            return sc
+        else:
+            return None
+        
+    def get_max_expo_values(self):
+        if 'MaxApertureValue' in self.exif_data:
+            sc = self.exif_data['MaxApertureValue']
+            return sc
+        else:
+            return None
+
+    def get_metrmode(self):
+        if 'MeteringMode' in self.exif_data:
+            sc = self.exif_data['MeteringMode']
+            return sc
+        else:
+            return None
+
+    def get_expo_prg(self):
+        if 'ExposureProgram' in self.exif_data:
+            sc = self.exif_data['ExposureProgram']
+            return sc
+        else:
+            return None
+#COLOR BALANCE
+    def get_white_balance(self):
+        if 'WhiteBalance' in self.exif_data:
+            sc = self.exif_data['WhiteBalance']
+            return sc
+        else:
+            return 'Not Found'
+
+    def get_color_spec(self):
+        if 'ColorSpace' in self.exif_data:
+            sc = self.exif_data['ColorSpace']
+            return sc
+        else:
+            return 'Not Found'
+
+    def get_flash(self):
+        if 'Flash' in self.exif_data:
+            sc = self.exif_data['Flash']
+            return sc
+        else:
+            return 'Not Found'
+
+    def get_orient(self):
+        if 'Orientation' in self.exif_data:
+            sc = self.exif_data['Orientation']
+            return sc
+        else:
+            return 'Not Found'
+
+
+    def get_ycbr_position(self):
+        if 'YCbCrPositioning' in self.exif_data:
+            sc = self.exif_data['YCbCrPositioning']
+            return sc
+        else:
+            return 'Not Found'
+
+    def get_x_res(self):
+        if 'XResolution' in self.exif_data:
+            sc = self.exif_data['XResolution']
+            return sc
+        else:
+            return 'Not Found'
+
+    def get_y_res(self):
+        if 'YResolution' in self.exif_data:
+            sc = self.exif_data['YResolution']
+            return sc
+        else:
+            return 'Not Found'
+
+    def get_spectime(self):
+        if 'SubsecTime' in self.exif_data:
+            sctime = self.exif_data['SubsecTime']
+            return sctime
+        else:
+            return 'Not Found'
+
+    def get_org_spectime(self):
+        if 'SubsecTimeOriginal' in self.exif_data:
+            sc = self.exif_data['SubsecTimeOriginal']
+            return sc
+        else:
+            return 'Not Found'
+
+    def get_dig_spectime(self):
+        if 'SubsecTimeDigitized' in self.exif_data:
+            sc = self.exif_data['SubsecTimeDigitized']
+            return sc
+        else:
+            return 'Not Found'
+
+    def get_expotime(self):
+        if 'ExposureTime' in self.exif_data:
+            sc = self.exif_data['ExposureTime']
+            return sc
+        else:
+            return 'Not Found'
+
+#exifinfooooooooooooooooooooooooooooooooooo
+    def get_exifversion(self):
+        if 'ExifVersion' in self.exif_data:
+            version = self.exif_data['ExifVersion']
+            return version
+        else:
+            return None
+
+    def get_exifoffset(self):
+        if 'ExifOffset' in self.exif_data:
+            sc = self.exif_data['ExifOffset']
+            return sc
+        else:
+            return None
+
+    def get_exif_info1(self):
+        if 'ExifInteroperabilityOffset' in self.exif_data:
+           sc = self.exif_data['ExifInteroperabilityOffset']
+           return sc
+        else:
+           return 'Not Found'
+
+
+    def get_exif_fno(self):
+        if 'FNumber' in self.exif_data:
+            no = self.exif_data['FNumber']
+            return no
+        else:
+            return None
+
+    def get_flashno(self):
+        if 'FlashPixVersion' in self.exif_data:
+            no = self.exif_data['FlashPixVersion']
+            return no
+        else:
+            return None
+
+#All functions which retursn camera related information
+def camera_info(path):
+    img = PILimage.open(path)
+    image = Worker(img)
+    version = image.version
+    camera1 = image.camera
+    idu = image.uid
+    sof = image.soft
+    foc = image.focal
+    sg.Print("*******************CAMERA-INFORMATION*********************")
+    sg.Print("IMAGE Exif Version:                     ", version)
+    sg.Print("CAMERA DETAILS:                         ", camera1)
+    sg.Print("CAMERA SOFTWARE:                        ", sof)
+    sg.Print("IMAGE UNIQUE ID:                        ", idu)
+    sg.Print("IMAGE FOCAL LENGTH:                     ", foc)
+
+#All functions which retursn gps related information
+def gps_info_all(path):
+    img = PILimage.open(path)
+    image = Worker(img)
+    latd = image.lat
+    lond = image.lon
+    lats = image.get_exif_lat()
+    lons = image.get_exif_lon()
+    latref = image.get_gpsref_lat()
+    lonref = image.get_gpsref_lon()
+    gpsver = image.gversion
+    alt = image.altitude
+    sg.Print("*******************GPS-INFORMATION************************")
+    sg.Print("GPS VERSION:                            ", gpsver)
+    sg.Print("GPS LATITUDE IN DEGREES:                ", latd)
+    sg.Print("GPS LATITUDE:                           ", lats)
+    sg.Print("GPS LONGITUDE IN DEGREES:               ", lond)
+    sg.Print("GPS LONGITUDE:                          ", lons)
+    sg.Print("GPS REF LATITUDE:                       ", latref)
+    sg.Print("GPS REF LONGITUDE:                      ", lonref)
+    sg.Print("GPS ALTITUDE:                           ", alt)
+    
+#All functions which retursn exif id version etc related information
+def exif_info_all(path):
+    img = PILimage.open(path)
+    image = Worker(img)
+    ever = image.get_exifversion()
+    eset = image.get_exifoffset()
+    eno = image.get_exif_fno()
+    einfo = image.get_exif_info1()
+    sg.Print("*******************EXIF-DETAIL****************************")
+    sg.Print("EXIF VERSION:                            ", ever)
+    sg.Print("EXIF OFFSET:                             ", eset)
+    sg.Print("EXIF FOCAL NO:                           ", eno)
+    sg.Print("EXIF ExifInteroperabilityOffset:         ", einfo)
+
+#All functions which retursn camera related information
+def image_info_all(path):
+    img = PILimage.open(path)
+    image = Worker(img)
+    hiet = image.get_exif_height()
+    wid  = image.get_exif_width()
+    sg.Print("*******************IMAGE-INFORMATION**********************")
+    sg.Print("IMAGE MODE:                             ", img.mode)
+    sg.Print("IMAGE PALETTE:                          ", img.palette)
+    sg.Print("IMAGE FORMAT:                           ", img.format)
+    sg.Print("IMAGE CURRENT SIZE:                     ", img.size)
+    sg.Print("IMAGE EXIF HEIGHT:                      ", hiet)
+    sg.Print("IMAGE EXIF WIDTH:                       ", wid)
+
+#All functions which retursn positioning of camera and angle related information
+def position_info_all(path):
+    img = PILimage.open(path)
+    image = Worker(img)
+    ycrP = image.get_ycbr_position()
+    yres = image.get_y_res()
+    xres = image.get_x_res()
+    ori  = image.get_orient()
+    sg.Print("*******************IMAGE POSITIONING**********************")
+    sg.Print("IMAGE ORIENTATION:                      ", ori)
+    sg.Print("IMAGE YCbCr POSITIONING:                ", ycrP)
+    sg.Print("IMAGE X-RESOLUTION:                     ", xres)
+    sg.Print("IMAGE y-RESOLUTION:                     ", yres)
+
+#All functions which retursn iso sensitivity ofcamera which is based on three pillers resolution exposure isospeed rating related information
+def iso_sensitivity_info_all(path):
+    img = PILimage.open(path)
+    image = Worker(img)
+    spr   = image.get_speed_rating()
+    esp   = image.get_exposure()
+    espp  = image.get_expo_prg()
+    res   = image.get_resolution()
+    scp   = image.get_scene_capture()
+    sg.Print("*******************ISO SENSITIVITY AND EXPOSURE***********")
+    sg.Print("ISOSPEEDRATING:                         ", spr)
+    sg.Print("EXPOSURE MODE:                          ", esp)
+    sg.Print("EXPOSURE PROGRAM:                       ", espp)
+    sg.Print("RESOLUTION UNIT:                        ", res)
+    sg.Print("SCENE CAPTURE TYPE:                     ", scp)
+
+#All functions which retursn iso sensitivity of camera which is based on three pillers related information
+def iso_sensitivity_values_info_all(path):
+    img = PILimage.open(path)
+    image = Worker(img)
+    shr   = image.get_shutter_value()
+    exv  = image.get_exposure_values()
+    mexv = image.get_max_expo_values()
+    bri   = image.get_brigt_value()
+    apv   = image.get_aprature_value()
+    apm   = image.get_max_aprature_value()
+    metr  = image.get_metrmode()
+    sg.Print("*******************ISO SENSITIVITY AND EXPOSURE VALUES****")
+    sg.Print("SHUTTER SPEED VALUE:                    ", shr)
+    sg.Print("EXPOSURE VALUE:                         ", exv)
+    sg.Print("MAX EXPOSURE VALUE:                     ", mexv)
+    sg.Print("BRIGHTNESS VALUE:                       ", bri)
+    sg.Print("APERTURE VALUE:                         ", apv)
+    sg.Print("MAX APERTURE VALUE:                     ", apm)
+    sg.Print("METERING MODE:                           ", metr)
+
+#describes all the information of color and light
+def color_balance_info_all(path):
+    img = PILimage.open(path)
+    image = Worker(img)
+    csp = image.get_color_spec()
+    wb  = image.get_white_balance()
+    gf  = image.get_flash()
+    gfno = image.get_flashno()
+    sg.Print("*******************COLOR BALANCE**************************")
+    sg.Print("COLOR SPACE:                            ", csp)
+    sg.Print("WHITE BALANCE:                          ", wb)
+    sg.Print("FLASH VALUE:                            ", gf)
+    sg.Print("FLASH PIX VERSION:                      ", gfno)
+
+#returns and output all the datetime related information
+def datetime_info_all(path):
+    img = PILimage.open(path)
+    image = Worker(img)
+    dt = image.date
+    dts = image.get_time_stamp()
+    dds = image.get_date_stamp()
+    spt = image.get_spectime()
+    sptor = image.get_org_spectime()
+    sptdz = image.get_dig_spectime()
+    ept = image.get_expotime()
+    sg.Print("*******************DATE-TIME INFORMATION*******************")
+    sg.Print("DATE AND TIME:                          ", dt)
+    sg.Print("GPS TIME STAMP:                         ", dts)
+    sg.Print("GPS DATE STAMP:                         ", dds)
+    sg.Print("SUBSEC TIME:                            ", spt)
+    sg.Print("SUBSEC TIME ORIGNAL:                    ", sptor)
+    sg.Print("SUBSEC TIME DIGITIZED:                  ", sptdz)
+    sg.Print("EXPOSURE TIME:                          ", ept)
+
+#main function calls all the functions to show the output
+def main(path):
+    img = PILimage.open(path)
+    image = Worker(img)
+
+    gps_info_all(path)
+    datetime_info_all(path)
+    camera_info(path)
+    exif_info_all(path)
+    image_info_all(path)
+    position_info_all(path)
+    iso_sensitivity_info_all(path)
+    iso_sensitivity_values_info_all(path)
+    color_balance_info_all(path)
+
+if __name__ == "__main__":
+    path = input("Please enter path to image file!")
+   
